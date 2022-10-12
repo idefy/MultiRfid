@@ -2,6 +2,19 @@
 
 This is a multiple RFID Readers system designed specifically for an Escape Room. The door will open after the 4 right cards(Tags) are read and recognized.
 
+## Changes
+This is a modification of https://github.com/Annaane/MultiRfid
+
+The original code was not ideal for 2 reasons:
+  1.  you could use the same tag on all readers one after the other and the door would open
+  2. there was no association between reader and tag, so you could mix and match, often this is not what you want for an escape room.
+
+In this version you need to associate the right tag with the right reader in order to unlock the door.
+
+I tried to keep modifications to a minimum so you can compare it to the original code.
+  
+
+
 ## Requirements :
    #### Hardware :
    * Arduino UNO.
