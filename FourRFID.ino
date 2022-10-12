@@ -1,18 +1,17 @@
 
 /**
+   https://github.com/idefy/MultiRfid is a modified version of https://github.com/Annaane/MultiRfid allowing to have only one tag valid per reader.
+   
+   
    --------------------------------------------------------------------------------------------------------------------
    Example sketch/program showing how to read data from more than one PICC to serial.
    --------------------------------------------------------------------------------------------------------------------
    This is a MFRC522 library example; for further details and other examples see: https://github.com/miguelbalboa/rfid
-
    Example sketch/program showing how to read data from more than one PICC (that is: a RFID Tag or Card) using a
    MFRC522 based RFID Reader on the Arduino SPI interface.
-
    Warning: This may not work! Multiple devices at one SPI are difficult and cause many trouble!! Engineering skill
             and knowledge are required!
-
    @license Released into the public domain.
-
    Typical pin layout used:
    -----------------------------------------------------------------------------------------
                MFRC522      Arduino       Arduino   Arduino    Arduino          Arduino
@@ -25,7 +24,6 @@
    SPI MOSI    MOSI         11 / ICSP-4   51        D11        ICSP-4           16
    SPI MISO    MISO         12 / ICSP-1   50        D12        ICSP-1           14
    SPI SCK     SCK          13 / ICSP-3   52        D13        ICSP-3           15
-
 */
 
 #include <SPI.h>
@@ -46,14 +44,15 @@
 
 // List of Tags UIDs that are allowed to open the puzzle
 byte tagarray[][4] = {
-  {0x4B, 0x17, 0xBC, 0x79},
-  {0x8A, 0x2B, 0xBC, 0x79}, 
-  {0x81, 0x29, 0xBC, 0x79},
-  {0xE6, 0xDF, 0xBB, 0x79},
+  {0x73, 0x2F, 0xFD, 0x1B}, // tag expected on reader 1
+  {0xA3, 0x66, 0x90, 0x1D}, // tag expected on reader 2
+  {0x63, 0x6F, 0xB6, 0x1D}, // tag expected on reader 3
+  {0x93, 0x8F, 0xA9, 0x1D}, // tag expected on reader 4
 };
 
+bool validatedTags [4]  =  { false, false, false, false };
+
 // Inlocking status :
-int tagcount = 0;
 bool access = false;
 
 #define NR_OF_READERS   4
@@ -89,7 +88,7 @@ void setup() {
     Serial.print(reader);
     Serial.print(F(": "));
     mfrc522[reader].PCD_DumpVersionToSerial();
-    //mfrc522[reader].PCD_SetAntennaGain(mfrc522[reader].RxGain_max);
+    mfrc522[reader].PCD_SetAntennaGain(mfrc522[reader].RxGain_max);
   }
 }
 
@@ -111,34 +110,30 @@ void loop() {
       dump_byte_array(mfrc522[reader].uid.uidByte, mfrc522[reader].uid.size);
       Serial.println();
 
-      for (int x = 0; x < sizeof(tagarray); x++)                  // tagarray's row
+      for (int i = 0; i < mfrc522[reader].uid.size; i++)        //tagarray's columns
       {
-        for (int i = 0; i < mfrc522[reader].uid.size; i++)        //tagarray's columns
+
+        if ( mfrc522[reader].uid.uidByte[i] != tagarray[reader][i]) //Comparing the UID in the buffer to the UID in the tag array.
         {
-          if ( mfrc522[reader].uid.uidByte[i] != tagarray[x][i])  //Comparing the UID in the buffer to the UID in the tag array.
+          DenyingTag();
+          break;
+        }
+        else
+        {
+          if (i == mfrc522[reader].uid.size - 1)                // Test if we browesed the whole UID.
           {
-            DenyingTag();
-            break;
+            AllowTag(reader);
           }
           else
           {
-            if (i == mfrc522[reader].uid.size - 1)                // Test if we browesed the whole UID.
-            {
-              AllowTag();
-            }
-            else
-            {
-              continue;                                           // We still didn't reach the last cell/column : continue testing!
-            }
+            continue;                                           // We still didn't reach the last cell/column : continue testing!
           }
         }
-        if (access) break;                                        // If the Tag is allowed, quit the test.
       }
-
 
       if (access)
       {
-        if (tagcount == NR_OF_READERS)
+        if (ValidateTags())
         {
           OpenDoor();
         }
@@ -151,9 +146,6 @@ void loop() {
       {
         UnknownTag();
       }
-      /*Serial.print(F("PICC type: "));
-        MFRC522::PICC_Type piccType = mfrc522[reader].PICC_GetType(mfrc522[reader].uid.sak);
-        Serial.println(mfrc522[reader].PICC_GetTypeName(piccType));*/
       // Halt PICC
       mfrc522[reader].PICC_HaltA();
       // Stop encryption on PCD
@@ -172,26 +164,42 @@ void dump_byte_array(byte * buffer, byte bufferSize) {
   }
 }
 
-void printTagcount() {
-  Serial.print("Tag n°");
-  Serial.println(tagcount);
+void printState() {
+  for (int i = 0; i < NR_OF_READERS; i++) {
+    if (i == 0) Serial.print("State - "); else Serial.print(", ");
+    Serial.print("Reader ");
+    Serial.print(i);
+    Serial.print(": ");
+    Serial.print(validatedTags[i]);
+  }
+  Serial.println(".");
 }
 
 void DenyingTag()
 {
-  tagcount = tagcount;
   access = false;
 }
 
-void AllowTag()
-{
-  tagcount = tagcount + 1;
+void AllowTag(uint8_t tagNumber) {
+  validatedTags[tagNumber] = true;
   access = true;
+}
+
+bool ValidateTags() {
+  int count = 0;
+  for (int i = 0; i < NR_OF_READERS; i++) {
+    if (validatedTags[i] == true) {
+      count++;
+    }
+  }
+  return count == NR_OF_READERS;
 }
 
 void Initialize()
 {
-  tagcount = 0;
+  for (i = 0; i < NR_OF_READERS; i++) {
+    validatedTags[ i ] = false;
+  }
   access = false;
 }
 
@@ -209,7 +217,7 @@ void OpenDoor()
 
 void MoreTagsNeeded()
 {
-  printTagcount();
+  printState();
   Serial.println("System needs more cards");
   digitalWrite(RedLed, HIGH);
   delay(1000);
@@ -220,7 +228,7 @@ void MoreTagsNeeded()
 void UnknownTag()
 {
   Serial.println("This Tag isn't allowed!");
-  printTagcount();
+  printState();
   for (int flash = 0; flash < 5; flash++)
   {
     digitalWrite(RedLed, HIGH);
@@ -229,6 +237,3 @@ void UnknownTag()
     delay(100);
   }
 }
-
-
-
