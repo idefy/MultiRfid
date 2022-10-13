@@ -197,7 +197,7 @@ bool ValidateTags() {
 
 void Initialize()
 {
-  for (i = 0; i < NR_OF_READERS; i++) {
+  for (int i = 0; i < NR_OF_READERS; i++) {
     validatedTags[ i ] = false;
   }
   access = false;
